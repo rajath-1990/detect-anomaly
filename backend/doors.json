@@ -1,0 +1,30 @@
+{
+  "_comment": "Edge weights are MINIMUM walk seconds, deliberately UNDERESTIMATED. A generous floor means fast employees never false-positive, while a cloned badge is still 20-30x below it.",
+
+  "nodes": [
+    { "door_id": "D-GATE",      "name": "Main Gate",        "building": "HQ",    "floor": 0, "lat": 12.97160, "lon": 77.59460 },
+    { "door_id": "D-LOBBY",     "name": "Lobby",            "building": "HQ",    "floor": 0, "lat": 12.97168, "lon": 77.59478 },
+    { "door_id": "D-CAFE",      "name": "Cafeteria",        "building": "HQ",    "floor": 0, "lat": 12.97180, "lon": 77.59492 },
+    { "door_id": "D-STAIR-1",   "name": "Stairwell L1",     "building": "HQ",    "floor": 0, "lat": 12.97172, "lon": 77.59470 },
+    { "door_id": "D-ELEV-1",    "name": "Elevator Lobby",   "building": "HQ",    "floor": 0, "lat": 12.97170, "lon": 77.59482 },
+    { "door_id": "D-FL3-HALL",  "name": "3rd Floor Hall",   "building": "HQ",    "floor": 3, "lat": 12.97170, "lon": 77.59482 },
+    { "door_id": "D-SERVER",    "name": "Server Room",      "building": "HQ",    "floor": 3, "lat": 12.97176, "lon": 77.59496 },
+    { "door_id": "D-LAB",       "name": "R&D Lab",          "building": "HQ",    "floor": 3, "lat": 12.97162, "lon": 77.59490 },
+    { "door_id": "D-ANX-GATE",  "name": "Annex Gate",       "building": "ANNEX", "floor": 0, "lat": 12.98340, "lon": 77.60510 },
+    { "door_id": "D-ANX-STORE", "name": "Annex Store Room", "building": "ANNEX", "floor": 0, "lat": 12.98352, "lon": 77.60528 }
+  ],
+
+  "edges": [
+    ["D-GATE",     "D-LOBBY",     40],
+    ["D-LOBBY",    "D-CAFE",      35],
+    ["D-LOBBY",    "D-STAIR-1",   20],
+    ["D-LOBBY",    "D-ELEV-1",    25],
+    ["D-ELEV-1",   "D-FL3-HALL",  55],
+    ["D-STAIR-1",  "D-FL3-HALL",  70],
+    ["D-FL3-HALL", "D-SERVER",    30],
+    ["D-FL3-HALL", "D-LAB",       25],
+    ["D-CAFE",     "D-STAIR-1",   30],
+    ["D-ANX-GATE", "D-ANX-STORE", 30],
+    ["D-GATE",     "D-ANX-GATE",  900]
+  ]
+}

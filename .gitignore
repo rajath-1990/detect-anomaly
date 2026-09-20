@@ -1,0 +1,15 @@
+node_modules/
+
+# Secrets - NEVER commit. Share via team chat.
+.env
+*serviceAccountKey*.json
+google-services.json
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.apk
+
+.DS_Store

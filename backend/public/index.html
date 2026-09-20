@@ -1,0 +1,492 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Impossible Travel Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ---------------------------------------------------------------- tokens --
+   Brass is the interactive accent - door hardware, the subject's own
+   material. Semantic colours (granted / denied) are deliberately kept off
+   that hue so state never reads as chrome.
+   Light palette is defined on bare :root; dark redefines only tokens.      */
+:root {
+  --ground:#eceff1;  --panel:#ffffff;    --sunk:#f4f6f7;
+  --line:#d3dade;    --line-soft:#e3e8ea;
+  --ink:#151c20;     --ink-2:#4a5a62;    --ink-3:#7d8f98;
+  --brass:#8a6115;   --brass-soft:#f0e3c8;
+  --grant:#2f7a4e;   --grant-bg:#e4f2e9;
+  --deny:#b4302b;    --deny-bg:#fbe6e4;
+  --shadow:0 1px 2px rgba(20,32,38,.07), 0 6px 18px -10px rgba(20,32,38,.22);
+  --radius:9px;
+  --sans:'Archivo','Helvetica Neue',Arial,sans-serif;
+  --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono',Consolas,monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#12181b; --panel:#1a2226;   --sunk:#151d21;
+    --line:#2b363c;   --line-soft:#232d32;
+    --ink:#e6edf0;    --ink-2:#a3b4bc;   --ink-3:#71858e;
+    --brass:#c8922f;  --brass-soft:#2e2413;
+    --grant:#5cb37d;  --grant-bg:#13271c;
+    --deny:#e2635a;   --deny-bg:#2c1512;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#12181b; --panel:#1a2226;   --sunk:#151d21;
+  --line:#2b363c;   --line-soft:#232d32;
+  --ink:#e6edf0;    --ink-2:#a3b4bc;   --ink-3:#71858e;
+  --brass:#c8922f;  --brass-soft:#2e2413;
+  --grant:#5cb37d;  --grant-bg:#13271c;
+  --deny:#e2635a;   --deny-bg:#2c1512;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+
+*, *::before, *::after { box-sizing:border-box; }
+body {
+  margin:0; background:var(--ground); color:var(--ink);
+  font:400 15px/1.5 var(--sans);
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible { outline:2px solid var(--brass); outline-offset:2px; border-radius:4px; }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+
+.num { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+/* --------------------------------------------------------- annunciator --- */
+header {
+  display:flex; align-items:center; gap:28px; flex-wrap:wrap;
+  padding:13px 22px; background:var(--panel); border-bottom:1px solid var(--line);
+}
+.brand { display:flex; flex-direction:column; gap:1px; margin-right:6px; }
+.brand b { font-size:15px; font-weight:600; letter-spacing:-.005em; }
+.brand span { font-size:10.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); }
+
+.lamps { display:flex; gap:26px; margin-left:auto; align-items:flex-end; }
+.lamp { display:flex; flex-direction:column; gap:2px; }
+.lamp .k { font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-3); }
+.lamp .v { font-size:19px; font-weight:600; line-height:1; }
+.lamp.alert .v { color:var(--deny); }
+.link {
+  display:flex; align-items:center; gap:7px;
+  font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3);
+}
+.led { width:7px; height:7px; border-radius:50%; background:var(--deny); }
+.led.on { background:var(--grant); box-shadow:0 0 0 3px color-mix(in srgb, var(--grant) 22%, transparent); }
+
+/* ------------------------------------------------------------- layout ---- */
+main {
+  display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:20px;
+  max-width:1420px; margin:0 auto; padding-block:20px; padding-left:22px; padding-right:22px;
+  align-items:start;
+}
+@media (max-width:1080px) { main { grid-template-columns:minmax(0,1fr); } }
+.col { display:flex; flex-direction:column; gap:20px; min-width:0; }
+
+section { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); }
+.sec-head {
+  display:flex; align-items:baseline; gap:10px;
+  padding:13px 18px; border-bottom:1px solid var(--line-soft);
+}
+.sec-head h2 { margin:0; font-size:11px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-2); font-weight:600; }
+.sec-head .hint { font-size:12px; color:var(--ink-3); margin-left:auto; }
+.sec-body { padding:16px 18px; }
+
+/* ------------------------------------------------------------ credentials */
+.people { display:flex; flex-wrap:wrap; gap:7px; }
+.chip {
+  display:inline-flex; align-items:baseline; gap:7px;
+  border:1px solid var(--line); background:var(--sunk); color:var(--ink);
+  padding:6px 11px; border-radius:6px; cursor:pointer;
+  font:500 13px var(--sans); transition:border-color .12s, background .12s;
+}
+.chip:hover { border-color:var(--brass); }
+.chip small { font-family:var(--mono); font-size:11px; color:var(--ink-3); font-weight:400; }
+.chip[aria-pressed="true"] { background:var(--brass-soft); border-color:var(--brass); }
+.chip[aria-pressed="true"] small { color:var(--brass); }
+.chip[data-revoked="true"] { opacity:.45; text-decoration:line-through; }
+
+/* ---------------------------------------------------------- the building -
+   Floors descend the page the way they stack in the building. The walk time
+   on each door is measured from wherever the selected credential last was. */
+.elevation { display:flex; flex-direction:column; }
+.floor { display:grid; grid-template-columns:82px minmax(0,1fr); gap:16px; padding:14px 0; }
+.floor + .floor { border-top:1px dashed var(--line-soft); }
+.floor-tag { padding-top:3px; }
+.floor-tag .n { font:600 20px/1 var(--mono); color:var(--ink-3); }
+.floor-tag .b { display:block; font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin-top:4px; }
+
+.doors { display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:8px; }
+.door {
+  display:flex; flex-direction:column; gap:3px; text-align:left;
+  border:1px solid var(--line); background:var(--sunk); color:var(--ink);
+  border-left:3px solid var(--line);
+  border-radius:6px; padding:10px 12px; cursor:pointer; font:inherit;
+  transition:border-color .12s, background .12s;
+}
+.door:hover:not(:disabled) { border-color:var(--brass); border-left-color:var(--brass); background:var(--panel); }
+.door:disabled { opacity:.42; cursor:not-allowed; }
+.door .dn { font-size:13.5px; font-weight:500; }
+.door .meta { display:flex; gap:8px; align-items:baseline; font-family:var(--mono); font-size:10.5px; color:var(--ink-3); }
+.door .walk { margin-left:auto; color:var(--ink-2); }
+.door[data-here="true"] { border-left-color:var(--brass); background:var(--brass-soft); }
+.door[data-here="true"] .walk { color:var(--brass); font-weight:600; }
+.door[data-flash="ok"]  { border-color:var(--grant); border-left-color:var(--grant); background:var(--grant-bg); }
+.door[data-flash="bad"] { border-color:var(--deny);  border-left-color:var(--deny);  background:var(--deny-bg); }
+
+/* ------------------------------------------------------------- controls -- */
+.row { display:flex; gap:8px; flex-wrap:wrap; }
+.btn {
+  border:1px solid var(--line); background:var(--sunk); color:var(--ink);
+  padding:8px 13px; border-radius:6px; cursor:pointer; font:500 13px var(--sans);
+  transition:border-color .12s, background .12s;
+}
+.btn:hover:not(:disabled) { border-color:var(--brass); }
+.btn:disabled { opacity:.5; cursor:progress; }
+.btn.threat { border-color:color-mix(in srgb, var(--deny) 42%, var(--line)); color:var(--deny); }
+.btn.threat:hover:not(:disabled) { background:var(--deny-bg); border-color:var(--deny); }
+
+/* --------------------------------------------------------------- alerts -- */
+.alert { border:1px solid var(--deny); border-left:4px solid var(--deny); border-radius:var(--radius);
+         background:var(--panel); box-shadow:var(--shadow); padding:16px 17px; }
+.alert + .alert { margin-top:10px; }
+.alert .kind { font-size:10px; font-weight:700; letter-spacing:.13em; color:var(--deny); }
+.alert .who { font-size:19px; font-weight:600; margin:5px 0 1px; letter-spacing:-.01em; }
+.alert .pid { font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+.leg { display:grid; grid-template-columns:auto 1fr auto; gap:3px 10px; margin:13px 0 12px;
+       font-size:12.5px; align-items:baseline; }
+.leg .pin { font-family:var(--mono); font-size:10px; color:var(--ink-3); letter-spacing:.06em; }
+.leg .pl { color:var(--ink); }
+.leg .pl em { font-style:normal; font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+.leg .pt { font-family:var(--mono); font-size:11.5px; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+.verdict { display:flex; align-items:baseline; gap:10px; padding-top:12px; border-top:1px solid var(--line-soft); }
+.verdict .big { font:700 30px/1 var(--mono); color:var(--deny); font-variant-numeric:tabular-nums; }
+.verdict .cap { font-size:12px; color:var(--ink-2); }
+.verdict .cap b { color:var(--ink); font-family:var(--mono); font-weight:500; }
+
+/* ----------------------------------------------------------------- feed -- */
+#feed { max-height:340px; overflow-y:auto; }
+.ev { display:grid; grid-template-columns:62px 74px minmax(0,1fr); gap:9px;
+      padding:6px 0; align-items:baseline; font-size:13px; }
+.ev + .ev { border-top:1px solid var(--line-soft); }
+.ev .t { font-family:var(--mono); font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums; }
+.ev .tag { font:600 9.5px/1.7 var(--mono); letter-spacing:.07em; text-align:center;
+           border-radius:3px; padding:0 5px; }
+.ev[data-k="ok"]    .tag { background:var(--grant-bg); color:var(--grant); }
+.ev[data-k="deny"]  .tag { background:var(--deny-bg);  color:var(--deny); }
+.ev[data-k="sys"]   .tag { background:var(--brass-soft); color:var(--brass); }
+.ev .d em { font-style:normal; color:var(--ink-3); }
+.empty { color:var(--ink-3); font-size:13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <b>Impossible Travel</b>
+    <span>Access Control · Operator Console</span>
+  </div>
+
+  <div class="lamps">
+    <div class="lamp"><span class="k">Scans</span><span class="v num" id="nScans">0</span></div>
+    <div class="lamp alert"><span class="k">Anomalies</span><span class="v num" id="nAnom">0</span></div>
+    <div class="lamp"><span class="k">Revoked</span><span class="v num" id="nRev">0</span></div>
+    <div class="link"><span class="led" id="led"></span><span id="conn">connecting</span></div>
+  </div>
+</header>
+
+<main>
+  <div class="col">
+    <section>
+      <div class="sec-head">
+        <h2>Credentials</h2>
+        <span class="hint" id="selHint">Select one to badge it at a door</span>
+      </div>
+      <div class="sec-body"><div class="people" id="people"></div></div>
+    </section>
+
+    <section>
+      <div class="sec-head">
+        <h2>Building elevation</h2>
+        <span class="hint" id="walkHint">Walk times appear once a credential is selected</span>
+      </div>
+      <div class="sec-body"><div class="elevation" id="map"></div></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Scripted scenarios</h2></div>
+      <div class="sec-body">
+        <div class="row">
+          <button class="btn threat" id="atk-clone"  data-atk="clone">Cloned badge</button>
+          <button class="btn threat" id="atk-steal"  data-atk="steal">Stolen credential</button>
+          <button class="btn"        id="atk-pooled" data-atk="pooled">Visitor pass · control</button>
+          <button class="btn"        id="reset">Clear tracked positions</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="col">
+    <section>
+      <div class="sec-head"><h2>Alerts</h2><span class="hint" id="alertHint">None open</span></div>
+      <div class="sec-body"><div id="alerts"><p class="empty">No impossible movement detected.</p></div></div>
+    </section>
+
+    <section>
+      <div class="sec-head"><h2>Event feed</h2></div>
+      <div class="sec-body"><div id="feed"><p class="empty">Waiting for scans…</p></div></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+
+let creds = [], doors = [], walk = {}, selected = null;
+const positions = {};                 // person_id -> door_id, mirrors the engine
+let nScans = 0, nAnom = 0, openAlerts = 0;
+
+const post = (url, body) =>
+  fetch(url, { method:'POST', headers:{'content-type':'application/json'},
+               body: body ? JSON.stringify(body) : undefined }).then(r => r.json());
+const clock = (ts) => new Date(ts).toLocaleTimeString('en-GB');
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+/** 110 -> "1m50s". Walk times are read at a glance, so keep them short. */
+function dur(s) {
+  if (s === null || s === undefined) return '—';
+  if (s < 60) return s + 's';
+  const m = Math.floor(s / 60), r = s % 60;
+  return r ? `${m}m${r}s` : `${m}m`;
+}
+
+// ------------------------------------------------------------- rendering ---
+
+function renderPeople() {
+  $('#people').innerHTML = creds.map(c => `
+    <button class="chip" data-cred="${c.credential_id}"
+            aria-pressed="${selected === c.credential_id}"
+            data-revoked="${c.revoked}">
+      ${c.person_name}<small>${c.credential_id}</small>
+    </button>`).join('');
+  $('#nRev').textContent = creds.filter(c => c.revoked).length;
+
+  const sel = creds.find(c => c.credential_id === selected);
+  $('#selHint').textContent = sel
+    ? `${sel.person_name} · ${sel.type}${sel.shared ? ' · pooled' : ''}`
+    : 'Select one to badge it at a door';
+}
+
+function renderMap() {
+  const sel = creds.find(c => c.credential_id === selected);
+  const at = sel ? positions[sel.person_id] : null;
+
+  $('#walkHint').textContent = at
+    ? `Minimum walk from ${doors.find(d => d.door_id === at).name}`
+    : sel ? 'No position on record yet — first scan sets it'
+          : 'Walk times appear once a credential is selected';
+
+  // Group by building + floor, then render floors top-down as they stack.
+  const floors = {};
+  for (const d of doors) {
+    const key = `${d.building}|${d.floor}`;
+    (floors[key] ||= { building:d.building, floor:d.floor, list:[] }).list.push(d);
+  }
+  const ordered = Object.values(floors).sort(
+    (a, b) => a.building.localeCompare(b.building) || b.floor - a.floor
+  );
+
+  $('#map').innerHTML = ordered.map(f => `
+    <div class="floor">
+      <div class="floor-tag">
+        <span class="n">L${f.floor}</span>
+        <span class="b">${f.building}</span>
+      </div>
+      <div class="doors">
+        ${f.list.map(d => {
+          const here = at === d.door_id;
+          const secs = at && !here ? walk[at]?.[d.door_id] : null;
+          return `
+          <button class="door" data-door="${d.door_id}" data-here="${here}"
+                  ${selected ? '' : 'disabled'}>
+            <span class="dn">${d.name}</span>
+            <span class="meta">${d.door_id}
+              <span class="walk">${here ? 'here now' : (at ? dur(secs) : '')}</span>
+            </span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function flash(doorId, good) {
+  const el = document.querySelector(`[data-door="${doorId}"]`);
+  if (!el) return;
+  el.dataset.flash = good ? 'ok' : 'bad';
+  setTimeout(() => delete el.dataset.flash, 1000);
+}
+
+function logEvent(kind, tag, html, ts) {
+  const feed = $('#feed');
+  feed.querySelector('.empty')?.remove();
+  const row = document.createElement('div');
+  row.className = 'ev';
+  row.dataset.k = kind;
+  row.innerHTML = `<span class="t">${clock(ts)}</span><span class="tag">${tag}</span><span class="d">${html}</span>`;
+  feed.prepend(row);
+  while (feed.children.length > 80) feed.lastChild.remove();
+}
+
+function showAlert(a) {
+  const box = $('#alerts');
+  box.querySelector('.empty')?.remove();
+
+  const creditIds = [...new Set([a.from.credential_id, a.to.credential_id])];
+  const el = document.createElement('div');
+  el.className = 'alert';
+  el.innerHTML = `
+    <div class="kind">${a.kind.replace(/_/g,' ')}</div>
+    <div class="who">${a.person_name}</div>
+    <div class="pid">${a.person_id}</div>
+    <div class="leg">
+      <span class="pin">FROM</span>
+      <span class="pl">${a.from_name} <em>${a.from.credential_id}</em></span>
+      <span class="pt">${clock(a.from.ts)}</span>
+      <span class="pin">TO</span>
+      <span class="pl">${a.to_name} <em>${a.to.credential_id}</em></span>
+      <span class="pt">${clock(a.to.ts)}</span>
+    </div>
+    <div class="verdict">
+      <span class="big">${a.severity}×</span>
+      <span class="cap">faster than possible<br>crossed in <b>${a.observed_s}s</b> · minimum <b>${a.required_s}s</b></span>
+    </div>
+    <div class="row" style="margin-top:13px">
+      ${creditIds.map(c => `<button class="btn threat" data-revoke="${c}">Revoke ${c}</button>`).join('')}
+    </div>`;
+  box.prepend(el);
+  openAlerts++;
+  $('#alertHint').textContent = `${openAlerts} open`;
+}
+
+// --------------------------------------------------------------- actions ---
+
+async function scan(credentialId, doorId) {
+  const out = await post('/events', { credential_id: credentialId, door_id: doorId });
+  flash(doorId, out.decision !== 'DENY' && out.verdict !== 'ANOMALY');
+  return out;
+}
+
+const SCENARIOS = {
+  clone:  { first:'B-4471', second:'B-4471', from:'D-LOBBY', to:'D-SERVER' },
+  steal:  { first:'B-4471', second:'M-9902', from:'D-LOBBY', to:'D-SERVER' },
+  pooled: { first:'V-0001', second:'V-0001', from:'D-LOBBY', to:'D-SERVER' }
+};
+
+async function runScenario(name) {
+  const s = SCENARIOS[name];
+  const buttons = [...document.querySelectorAll('[data-atk]')];
+  buttons.forEach(b => (b.disabled = true));
+  try {
+    const first = await scan(s.first, s.from);
+    if (first.decision === 'DENY') {
+      logEvent('sys','HALT', `<em>${s.first} is revoked — the attack cannot proceed</em>`, Date.now());
+      return;
+    }
+    await sleep(4000);
+    await scan(s.second, s.to);
+  } finally {
+    buttons.forEach(b => (b.disabled = false));
+  }
+}
+
+async function refreshCredentials() {
+  creds = await fetch('/credentials').then(r => r.json());
+  renderPeople();
+}
+
+document.addEventListener('click', async (e) => {
+  const chip = e.target.closest('[data-cred]');
+  if (chip) { selected = chip.dataset.cred; renderPeople(); renderMap(); return; }
+
+  const door = e.target.closest('[data-door]');
+  if (door && selected) { scan(selected, door.dataset.door); return; }
+
+  const atk = e.target.closest('[data-atk]');
+  if (atk) { runScenario(atk.dataset.atk); return; }
+
+  const rev = e.target.closest('[data-revoke]');
+  if (rev) {
+    rev.disabled = true;
+    await post(`/credentials/${rev.dataset.revoke}/revoke`);
+    return;
+  }
+
+  if (e.target.id === 'reset') {
+    await post('/debug/reset');
+    for (const k of Object.keys(positions)) delete positions[k];
+    renderMap();
+  }
+});
+
+// ---------------------------------------------------------------- stream ---
+
+function connect() {
+  const es = new EventSource('/stream');
+  es.onopen  = () => { $('#led').classList.add('on');    $('#conn').textContent = 'live'; };
+  es.onerror = () => { $('#led').classList.remove('on'); $('#conn').textContent = 'reconnecting'; };
+
+  es.onmessage = (m) => {
+    const d = JSON.parse(m.data);
+
+    if (d.type === 'scan') {
+      $('#nScans').textContent = ++nScans;
+      const note = d.reason === 'POOLED_CREDENTIAL' ? ' <em>pooled — exempt</em>' : '';
+      logEvent('ok','GRANT', `${d.person_name} · ${d.door_name}${note}`, d.ts);
+      const c = creds.find(x => x.credential_id === d.credential_id);
+      if (c) { positions[c.person_id] = d.door_id; renderMap(); }
+
+    } else if (d.type === 'anomaly') {
+      $('#nScans').textContent = ++nScans;
+      $('#nAnom').textContent  = ++nAnom;
+      logEvent('deny','ANOMALY',
+        `${d.person_name} · ${d.from_name} → ${d.to_name} <em>in ${d.observed_s}s</em>`, d.to.ts);
+      showAlert(d);
+      positions[d.person_id] = d.to.door_id;
+      renderMap();
+
+    } else if (d.type === 'deny') {
+      logEvent('deny','DENY', `${d.person_name} · ${d.door_name} <em>credential revoked</em>`, d.ts);
+
+    } else if (d.type === 'revoked' || d.type === 'restored') {
+      logEvent('sys', d.type === 'revoked' ? 'REVOKE' : 'RESTORE', `<em>${d.credential_id}</em>`, d.ts);
+      refreshCredentials();
+
+    } else if (d.type === 'reset') {
+      logEvent('sys','RESET', `<em>${d.cleared} tracked positions cleared</em>`, d.ts);
+    }
+  };
+}
+
+(async function boot() {
+  const [c, d, g, h] = await Promise.all([
+    fetch('/credentials').then(r => r.json()),
+    fetch('/doors').then(r => r.json()),
+    fetch('/graph').then(r => r.json()),
+    fetch('/health').then(r => r.json())
+  ]);
+  creds = c; doors = d; walk = g;
+  nScans = h.scans ?? 0; nAnom = h.anomalies ?? 0;
+  $('#nScans').textContent = nScans;
+  $('#nAnom').textContent = nAnom;
+  renderPeople();
+  renderMap();
+  connect();
+})();
+</script>
+</body>
+</html>

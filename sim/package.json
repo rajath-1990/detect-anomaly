@@ -1,0 +1,11 @@
+{
+  "name": "access-anomaly-sim",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Test infrastructure: simulated access-event streams",
+  "scripts": {
+    "normal": "node normal.js",
+    "attack": "node attack.js"
+  }
+}
