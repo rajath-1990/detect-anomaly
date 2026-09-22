@@ -19,6 +19,11 @@ const raw = JSON.parse(readFileSync(join(here, 'doors.json'), 'utf8'));
 export const doors = raw.nodes;
 export const doorById = Object.fromEntries(raw.nodes.map((n) => [n.door_id, n]));
 
+// Raw adjacency, for the operator console only. The engine never needs it - it
+// reads the precomputed matrix below - but a map that draws corridors has to
+// know which doors are actually joined, which a distance matrix cannot say.
+export const edges = raw.edges;
+
 const ids = raw.nodes.map((n) => n.door_id);
 
 // dist[a][b] = minimum walk seconds. Infinity = no walking route at all

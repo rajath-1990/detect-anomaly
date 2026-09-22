@@ -15,10 +15,21 @@
  * Only "too fast" ever flags. Slower than the minimum is always fine - people
  * stop, chat, get coffee. So false positives can only come from bad graph data
  * or bad clocks, never from users behaving like users.
+ *
+ * TWO TIERS, and the split is load-bearing:
+ *
+ *   ANOMALY (Tier A, below)  the velocity check. A proof. Auto-revokes.
+ *   REVIEW  (Tier B, rules.js) plausibility heuristics for attackers patient
+ *                              enough to leave no velocity signature. Amber
+ *                              queue, never revokes.
+ *
+ * Nothing heuristic may ever return ANOMALY. That is what keeps "a revoked
+ * badge is always provably impossible" true.
  */
 
-import { minTravelSeconds } from './graph.js';
+import { minTravelSeconds, doorById } from './graph.js';
 import { store } from './store.js';
+import { review } from './rules.js';
 
 /**
  * Required travel time is multiplied by this before comparing. 0.8 means a scan
@@ -43,27 +54,50 @@ export function evaluate(evt) {
   const cred = store.getCredential(evt.credential_id);
 
   if (!cred) {
-    return { verdict: 'UNKNOWN_CREDENTIAL' };
+    return { verdict: 'UNKNOWN_CREDENTIAL', check: 'UNKNOWN_CREDENTIAL' };
   }
+
+  const door = doorById[evt.door_id];
+
+  // --- Tier A: physics ------------------------------------------------------
 
   // Pooled credentials - visitor passes, contractor badges, the one kept on a
   // hook at the loading dock - belong to a role, not a person. Many bodies use
   // them legitimately every day, so person-level physics does not apply.
-  if (cred.shared) {
-    return { verdict: 'OK', reason: 'POOLED_CREDENTIAL' };
-  }
+  // `check` says WHICH of the OK cases this is. `reason` is deliberately left
+  // alone: engine.js's REVIEW object below copies `reason` and nothing else, and
+  // writeReview throws on an undefined one - that throw is what keeps the
+  // `reviews` collection empty (see CLAUDE.md's known boundaries). Putting this
+  // data on `reason` would silently start filling that collection mid-demo.
+  let result = cred.shared
+    ? { verdict: 'OK', reason: 'POOLED_CREDENTIAL', check: 'POOLED_CREDENTIAL' }
+    : { verdict: 'OK', check: 'FIRST_SCAN' };
 
-  const prev = store.getLastSeen(cred.person_id);
-  let result = { verdict: 'OK' };
+  const prev = cred.shared ? null : store.getLastSeen(cred.person_id);
 
   // No previous scan: nothing to compare against.
   // Same door twice: a fumbled badge tap, not movement. Skip both.
-  if (prev && prev.door_id !== evt.door_id) {
+  if (prev && prev.door_id === evt.door_id) {
+    result.check = 'SAME_DOOR';
+  } else if (prev) {
     const observed = (evt.ts - prev.ts) / 1000;
     const required = minTravelSeconds(prev.door_id, evt.door_id);
 
+    // These two were computed on every legal walk and thrown away. The console
+    // cannot re-derive them - only the engine knows `prev` - and a second copy
+    // of the physics in the browser is exactly what CLAUDE.md forbids.
+    // `flags_under_s` ships the threshold so TOLERANCE never leaves this file:
+    // showing required_s alone renders "took 22.0s, minimum 25.0s, legal",
+    // which contradicts itself.
+    result.check        = observed > 0 ? 'LEGAL_WALK' : 'OUT_OF_ORDER';
+    result.from_door_id = prev.door_id;
+    result.observed_s   = +observed.toFixed(2);
+    result.required_s   = required;
+    result.flags_under_s = +(required * TOLERANCE).toFixed(1);
+
     // observed <= 0 means events arrived out of order. Do not treat network
-    // jitter as an attack.
+    // jitter as an attack. `observed` is the RAW float here on purpose -
+    // rounding before this comparison would change which scans flag.
     if (observed > 0 && observed < required * TOLERANCE) {
       result = {
         verdict: 'ANOMALY',
@@ -85,11 +119,44 @@ export function evaluate(evt) {
     }
   }
 
-  store.setLastSeen(cred.person_id, {
-    door_id: evt.door_id,
-    ts: evt.ts,
-    via_cred: evt.credential_id
-  });
+  // --- Tier B: plausibility -------------------------------------------------
+
+  // Only when physics has not already spoken. Red outranks amber: an alert that
+  // says both "impossible" and "unusual" buries the half that matters.
+  // Evaluated before the state updates below, because both rules ask what was
+  // true immediately BEFORE this scan.
+  if (result.verdict !== 'ANOMALY') {
+    const findings = review(evt, cred, door, store);
+    if (findings.length > 0) {
+      result = {
+        verdict: 'REVIEW',
+        reason: result.reason,
+        person_id: cred.person_id,
+        person_name: cred.person_name,
+        credential_id: evt.credential_id,
+        door_id: evt.door_id,
+        ts: evt.ts,
+        findings
+      };
+    }
+  }
+
+  // --- state ----------------------------------------------------------------
+
+  // Pooled credentials never update position: they are not a body to track, and
+  // writing one would corrupt the next real holder's physics.
+  if (!cred.shared) {
+    // A perimeter scan is the body entering the boundary. Everything inside is
+    // vouched for by it until the session goes idle.
+    if (door?.perimeter) store.openSession(cred.person_id, evt.door_id, evt.ts);
+
+    store.setLastSeen(cred.person_id, {
+      door_id: evt.door_id,
+      ts: evt.ts,
+      via_cred: evt.credential_id
+    });
+    store.markDoorUsed(cred.person_id, evt.door_id);
+  }
 
   return result;
 }

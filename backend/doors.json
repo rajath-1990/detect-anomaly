@@ -1,16 +1,20 @@
 {
   "_comment": "Edge weights are MINIMUM walk seconds, deliberately UNDERESTIMATED. A generous floor means fast employees never false-positive, while a cloned badge is still 20-30x below it.",
 
+  "_comment_perimeter": "`perimeter: true` marks a door that crosses the building boundary. Scanning one opens a presence session; an interior scan with no open session means the body got inside without badging.",
+
+  "_comment_sensitivity": "`sensitivity: high` opts a door into the plausibility rules (see rules.js). Keep this list short - these rules are heuristics, and every door added to it costs amber volume. `hours` is the [open, close) local-hour window access is expected in.",
+
   "nodes": [
-    { "door_id": "D-GATE",      "name": "Main Gate",        "building": "HQ",    "floor": 0, "lat": 12.97160, "lon": 77.59460 },
+    { "door_id": "D-GATE",      "name": "Main Gate",        "building": "HQ",    "floor": 0, "lat": 12.97160, "lon": 77.59460, "perimeter": true },
     { "door_id": "D-LOBBY",     "name": "Lobby",            "building": "HQ",    "floor": 0, "lat": 12.97168, "lon": 77.59478 },
     { "door_id": "D-CAFE",      "name": "Cafeteria",        "building": "HQ",    "floor": 0, "lat": 12.97180, "lon": 77.59492 },
     { "door_id": "D-STAIR-1",   "name": "Stairwell L1",     "building": "HQ",    "floor": 0, "lat": 12.97172, "lon": 77.59470 },
     { "door_id": "D-ELEV-1",    "name": "Elevator Lobby",   "building": "HQ",    "floor": 0, "lat": 12.97170, "lon": 77.59482 },
     { "door_id": "D-FL3-HALL",  "name": "3rd Floor Hall",   "building": "HQ",    "floor": 3, "lat": 12.97170, "lon": 77.59482 },
-    { "door_id": "D-SERVER",    "name": "Server Room",      "building": "HQ",    "floor": 3, "lat": 12.97176, "lon": 77.59496 },
+    { "door_id": "D-SERVER",    "name": "Server Room",      "building": "HQ",    "floor": 3, "lat": 12.97176, "lon": 77.59496, "sensitivity": "high", "hours": [7, 21] },
     { "door_id": "D-LAB",       "name": "R&D Lab",          "building": "HQ",    "floor": 3, "lat": 12.97162, "lon": 77.59490 },
-    { "door_id": "D-ANX-GATE",  "name": "Annex Gate",       "building": "ANNEX", "floor": 0, "lat": 12.98340, "lon": 77.60510 },
+    { "door_id": "D-ANX-GATE",  "name": "Annex Gate",       "building": "ANNEX", "floor": 0, "lat": 12.98340, "lon": 77.60510, "perimeter": true },
     { "door_id": "D-ANX-STORE", "name": "Annex Store Room", "building": "ANNEX", "floor": 0, "lat": 12.98352, "lon": 77.60528 }
   ],
 

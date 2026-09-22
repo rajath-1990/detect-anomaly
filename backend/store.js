@@ -2,16 +2,33 @@
  * Hot-path state. Process-local, in-memory, sub-microsecond.
  *
  * This is the ONLY stateful module. Swapping to Redis for multi-instance
- * deployment means reimplementing these five functions against ioredis and
- * changing nothing else.
+ * deployment means reimplementing these functions against ioredis and changing
+ * nothing else. `persistence.js` serialises this module and nothing else.
  *
  * Note the detection key is person_id, not credential_id: physics applies to
  * bodies. One employee with a badge AND a mobile key is still one body, so a
  * badge-then-mobile collision at two distant doors must be caught too.
  */
 
+/**
+ * A presence session ends after this long without any scan. No exit readers
+ * exist, so "left the building" has to be inferred from silence. Long enough to
+ * cover a full shift plus lunch; short enough that yesterday's session does not
+ * vouch for today's scan.
+ */
+const SESSION_IDLE_MS = 4 * 60 * 60 * 1000;
+
+/** Restored state older than this is dropped at boot - positions, not fossils. */
+const STATE_TTL_MS = 24 * 60 * 60 * 1000;
+
 /** person_id -> { door_id, ts, via_cred } */
 const lastSeen = new Map();
+
+/** person_id -> { entry_door, entered_ts } - open when they badged in at a perimeter door */
+const sessions = new Map();
+
+/** person_id -> Set(door_id) ever used. Backs the first-use plausibility rule. */
+const doorHistory = new Map();
 
 /** credential_id -> { person_id, person_name, type, shared } */
 const credentials = new Map();
@@ -19,15 +36,69 @@ const credentials = new Map();
 /** credential_ids that have been killed */
 const revoked = new Set();
 
+/** Set by any mutation worth persisting; consumed by the snapshot timer. */
+let dirty = false;
+
 export const store = {
   getLastSeen: (personId) => lastSeen.get(personId),
 
-  setLastSeen: (personId, state) => lastSeen.set(personId, state),
+  /**
+   * Refuses to move a position backwards in time. Server-stamped events are
+   * always monotonic, but batched or reader-stamped delivery is not, and a stale
+   * event overwriting a fresh position would hide the very next real anomaly.
+   */
+  setLastSeen(personId, state) {
+    const prev = lastSeen.get(personId);
+    if (prev && state.ts < prev.ts) return false;
+    lastSeen.set(personId, state);
+    dirty = true;
+    return true;
+  },
+
+  /**
+   * The person's open presence session, or null. A session is only as alive as
+   * the person's last scan - silence past SESSION_IDLE_MS closes it.
+   */
+  getSession(personId, now = Date.now()) {
+    const s = sessions.get(personId);
+    if (!s) return null;
+    const reference = lastSeen.get(personId)?.ts ?? s.entered_ts;
+    if (now - reference > SESSION_IDLE_MS) {
+      sessions.delete(personId);
+      return null;
+    }
+    return s;
+  },
+
+  /** Called when a perimeter door is scanned: the body is now accounted for inside. */
+  openSession(personId, entryDoor, ts) {
+    sessions.set(personId, { entry_door: entryDoor, entered_ts: ts });
+    dirty = true;
+  },
+
+  hasUsedDoor: (personId, doorId) => doorHistory.get(personId)?.has(doorId) ?? false,
+
+  markDoorUsed(personId, doorId) {
+    let set = doorHistory.get(personId);
+    if (!set) doorHistory.set(personId, (set = new Set()));
+    if (!set.has(doorId)) {
+      set.add(doorId);
+      dirty = true;
+    }
+  },
 
   getCredential: (credId) => credentials.get(credId),
 
-  /** Replaces the whole registry. Called at boot and on any Firestore change. */
+  /**
+   * Replaces the whole registry. Called at boot and on any Firestore change.
+   * An empty list is refused: a transient bad snapshot would otherwise turn every
+   * credential UNKNOWN and silently drop every revocation.
+   */
   loadCredentials(list) {
+    if (!Array.isArray(list) || list.length === 0) {
+      console.warn('[store] refused empty credential list - keeping current registry');
+      return false;
+    }
     credentials.clear();
     revoked.clear();
     for (const c of list) {
@@ -39,6 +110,7 @@ export const store = {
       });
       if (c.revoked) revoked.add(c.credential_id);
     }
+    return true;
   },
 
   isRevoked: (credId) => revoked.has(credId),
@@ -58,14 +130,57 @@ export const store = {
 
   stats: () => ({
     people_tracked: lastSeen.size,
+    sessions_open: sessions.size,
     credentials: credentials.size,
     revoked: revoked.size
   }),
 
-  /** Demo only. Clears tracked positions so the attack can be replayed. */
+  /** True once since the last call. Drives the debounced snapshot. */
+  consumeDirty() {
+    const was = dirty;
+    dirty = false;
+    return was;
+  },
+
+  /**
+   * Everything worth surviving a restart. Revocations are deliberately excluded:
+   * they live in Firestore (or credentials.json), which is already the registry's
+   * source of truth - persisting them here would give them two.
+   */
+  snapshot: () => ({
+    saved_at: Date.now(),
+    last_seen: [...lastSeen.entries()],
+    sessions: [...sessions.entries()],
+    door_history: [...doorHistory.entries()].map(([p, set]) => [p, [...set]])
+  }),
+
+  /** Inverse of snapshot(). Returns how many people were restored. */
+  restore(snap, now = Date.now()) {
+    if (!snap || now - (snap.saved_at ?? 0) > STATE_TTL_MS) return 0;
+
+    for (const [person, state] of snap.last_seen ?? []) {
+      if (now - state.ts <= STATE_TTL_MS) lastSeen.set(person, state);
+    }
+    for (const [person, s] of snap.sessions ?? []) {
+      if (now - s.entered_ts <= STATE_TTL_MS) sessions.set(person, s);
+    }
+    for (const [person, list] of snap.door_history ?? []) {
+      doorHistory.set(person, new Set(list));
+    }
+    return lastSeen.size;
+  },
+
+  /**
+   * Demo only. Forgets everything person-level so an attack can be replayed:
+   * positions, sessions and door history all have to go, or the replay's first
+   * scan is no longer that person's first scan.
+   */
   clearLastSeen() {
     const n = lastSeen.size;
     lastSeen.clear();
+    sessions.clear();
+    doorHistory.clear();
+    dirty = true;
     return n;
   }
 };

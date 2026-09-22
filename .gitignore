@@ -13,3 +13,7 @@ android/local.properties
 *.apk
 
 .DS_Store
+
+# Restart-survival snapshot - machine-local runtime state
+backend/.state.json
+backend/.state.json.tmp

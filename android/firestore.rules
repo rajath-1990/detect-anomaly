@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// Reference copy. Paste into Firebase console -> Firestore -> Rules -> Publish.
+// Deliberately NOT console "test mode": those rules carry a 30-day request.time
+// expiry that silently empties the feed weeks later.
+//
+// The Admin SDK bypasses rules entirely, so these constrain only the phone.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The app consumes red alerts. Only the backend writes them.
+    match /anomalies/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Static, seeded by `npm run seed`. The app reads it to turn door ids into names.
+    match /doors/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /credentials/{id} {
+      allow read: if true;
+
+      // create MUST stay false. store.loadCredentials() replaces the whole
+      // registry from every snapshot and only refuses a ZERO-length list. A
+      // merge-set onto a missing doc counts as a create here, so without this
+      // an unseeded collection + one phone revoke = a 1-entry registry and
+      // every other credential goes UNKNOWN_CREDENTIAL. Detection dies silently.
+      allow create: if false;
+      allow delete: if false;
+
+      // One boolean, one direction. No field injection, no un-revoke.
+      allow update: if request.resource.data
+                      .diff(resource.data).affectedKeys().hasOnly(['revoked'])
+                    && request.resource.data.revoked == true;
+    }
+
+    // Out of app scope. Admin SDK still writes these fine.
+    match /reviews/{id}   { allow read, write: if false; }
+    match /stats/{id}     { allow read, write: if false; }
+    match /{document=**}  { allow read, write: if false; }
+  }
+}
