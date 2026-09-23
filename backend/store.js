@@ -30,6 +30,17 @@ const sessions = new Map();
 /** person_id -> Set(door_id) ever used. Backs the first-use plausibility rule. */
 const doorHistory = new Map();
 
+/**
+ * person_id -> Map(`door|RULE,RULE` -> ts) of amber findings already written out.
+ *
+ * Tier B does not deduplicate by design - NO_ENTRY_PATH honestly re-fires on
+ * every sensitive-door scan until the session idles - and that is fine for the
+ * console, where the flicker is the signal. It is NOT fine for Firestore: one
+ * doc per scan buries the phone's queue and burns the free tier. Same 4h
+ * lifetime as a session, so a genuinely new visit alerts again.
+ */
+const reviewsWritten = new Map();
+
 /** credential_id -> { person_id, person_name, type, shared } */
 const credentials = new Map();
 
@@ -85,6 +96,29 @@ export const store = {
       set.add(doorId);
       dirty = true;
     }
+  },
+
+  /**
+   * True the FIRST time this person trips this exact finding set at this door
+   * within a session's lifetime, false every repeat. Records as it answers, so
+   * it is called once per scan and only on the write path.
+   *
+   * The findings are sorted into the key: OFF_HOURS+NO_ENTRY_PATH+FIRST_USE and
+   * the same scan a second later without FIRST_USE are different situations and
+   * each deserves one doc.
+   */
+  shouldWriteReview(personId, doorId, findings, now = Date.now()) {
+    const key = `${doorId}|${findings.map((f) => f.rule).sort().join(',')}`;
+
+    let seen = reviewsWritten.get(personId);
+    if (!seen) reviewsWritten.set(personId, (seen = new Map()));
+
+    const last = seen.get(key);
+    if (last !== undefined && now - last <= SESSION_IDLE_MS) return false;
+
+    seen.set(key, now);
+    dirty = true;
+    return true;
   },
 
   getCredential: (credId) => credentials.get(credId),
@@ -151,7 +185,10 @@ export const store = {
     saved_at: Date.now(),
     last_seen: [...lastSeen.entries()],
     sessions: [...sessions.entries()],
-    door_history: [...doorHistory.entries()].map(([p, set]) => [p, [...set]])
+    door_history: [...doorHistory.entries()].map(([p, set]) => [p, [...set]]),
+    // Without this a restart re-opens the amber floodgate: every suppressed
+    // finding writes a fresh doc on the next scan.
+    reviews_written: [...reviewsWritten.entries()].map(([p, m]) => [p, [...m]])
   }),
 
   /** Inverse of snapshot(). Returns how many people were restored. */
@@ -167,6 +204,10 @@ export const store = {
     for (const [person, list] of snap.door_history ?? []) {
       doorHistory.set(person, new Set(list));
     }
+    for (const [person, entries] of snap.reviews_written ?? []) {
+      const fresh = entries.filter(([, ts]) => now - ts <= SESSION_IDLE_MS);
+      if (fresh.length) reviewsWritten.set(person, new Map(fresh));
+    }
     return lastSeen.size;
   },
 
@@ -180,6 +221,7 @@ export const store = {
     lastSeen.clear();
     sessions.clear();
     doorHistory.clear();
+    reviewsWritten.clear();
     dirty = true;
     return n;
   }

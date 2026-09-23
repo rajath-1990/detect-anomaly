@@ -43,6 +43,24 @@ class AnomalyRepository(
     }
 
     /**
+     * Live amber feed, newest first. Read-only by rule and by intent - there is
+     * no write counterpart here, and the security rules block one anyway.
+     */
+    fun reviews(): Flow<List<Review>> = callbackFlow {
+        val reg = db.collection("reviews")
+            .orderBy("created_at", Query.Direction.DESCENDING)
+            .limit(FEED_LIMIT)
+            .addSnapshotListener { snap, err ->
+                if (err != null) {
+                    Log.e(TAG, "review listener failed", err)
+                    return@addSnapshotListener
+                }
+                trySend(snap?.documents?.mapNotNull { it.toReview() } ?: emptyList())
+            }
+        awaitClose { reg.remove() }
+    }
+
+    /**
      * Which credentials are already dead. Server truth, not optimistic local
      * state - watching this is what makes the button flip to REVOKED only once
      * the write has actually landed.

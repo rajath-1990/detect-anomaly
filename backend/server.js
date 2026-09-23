@@ -162,10 +162,17 @@ app.post('/events', async (req, res) => {
     // see the tier split in engine.js.
     stats.bumpReview();
     logReview(outcome);
+    // SSE is unconditional - the console re-drawing every scan is the point.
     push({ type: 'review', ...outcome, door_name: doorById[outcome.door_id]?.name });
-    firestore.writeReview(outcome).catch((e) =>
-      console.error('[firestore] review write failed:', e.message)
-    );
+
+    // Firestore is NOT. The phone's amber queue is a list a human reads, and
+    // Tier B re-fires the same finding on every sensitive-door scan until the
+    // session idles. One doc per situation, not one per scan.
+    if (store.shouldWriteReview(outcome.person_id, outcome.door_id, outcome.findings, evt.ts)) {
+      firestore.writeReview(outcome).catch((e) =>
+        console.error('[firestore] review write failed:', e.message)
+      );
+    }
 
   } else {
     console.log(`  ok    ${evt.credential_id} @ ${evt.door_id.padEnd(12)} ${person?.person_name ?? '?'}`);

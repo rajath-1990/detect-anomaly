@@ -38,8 +38,15 @@ service cloud.firestore {
                     && request.resource.data.revoked == true;
     }
 
+    // Amber findings. The app shows them read-only - there is no triage state to
+    // write back, and giving the phone a write here would need Auth it has not
+    // got. Only the backend (Admin SDK) fills this.
+    match /reviews/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // Out of app scope. Admin SDK still writes these fine.
-    match /reviews/{id}   { allow read, write: if false; }
     match /stats/{id}     { allow read, write: if false; }
     match /{document=**}  { allow read, write: if false; }
   }

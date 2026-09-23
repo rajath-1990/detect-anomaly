@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 
 // Same three semantic colours as the operator console.
 private val Deny = Color(0xFFB4302B)
+private val Amber = Color(0xFF9A6B10)
 private val Ink = Color(0xFF1A1A1A)
 private val Muted = Color(0xFF6B6B6B)
 private val Dead = Color(0xFF8A8A8A)
@@ -42,7 +43,8 @@ fun AlertScreen(
     highlightId: String?,
     onRevoke: (String) -> Unit
 ) {
-    if (state.alerts.isEmpty()) {
+    // Only empty when BOTH feeds are, or an amber-only state renders a blank screen.
+    if (state.alerts.isEmpty() && state.reviews.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No impossible movement detected.", color = Muted, fontSize = 15.sp)
         }
@@ -70,6 +72,59 @@ fun AlertScreen(
                 highlighted = a.id == highlightId,
                 onRevoke = onRevoke
             )
+        }
+
+        // Amber always sits BELOW red. A heuristic finding must never push a
+        // proof off the top of the screen.
+        if (state.reviews.isNotEmpty()) {
+            item {
+                Text(
+                    "NEEDS A LOOK",
+                    color = Amber,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+            items(state.reviews, key = { it.id }) { r -> ReviewCard(review = r, state = state) }
+        }
+    }
+}
+
+/**
+ * Amber card. No buttons, by design - Tier B is plausibility, not proof, so it
+ * informs an operator and never offers to revoke anybody.
+ */
+@Composable
+private fun ReviewCard(review: Review, state: UiState) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF9EF))
+    ) {
+        Column(Modifier.padding(16.dp)) {
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    state.doorName(review.doorId),
+                    color = Ink,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(review.ts.asClock(), color = Muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+            }
+            Text(review.personName, color = Muted, fontSize = 13.sp)
+
+            Spacer(Modifier.height(10.dp))
+            // One line per rule that tripped, with the engine's own wording.
+            review.findings.forEach { f ->
+                Text(f.ruleLabel, color = Amber, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(f.detail, color = Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(6.dp))
+            }
+
+            Text("Review only - nothing has been revoked.", color = Muted, fontSize = 11.sp)
         }
     }
 }

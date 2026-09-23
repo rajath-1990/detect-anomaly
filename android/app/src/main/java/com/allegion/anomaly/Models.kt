@@ -40,6 +40,27 @@ data class Anomaly(
         get() = listOf(from.credentialId, to.credentialId).distinct()
 }
 
+/** One Tier B rule that tripped: NO_ENTRY_PATH / OFF_HOURS / FIRST_USE. */
+data class Finding(
+    val rule: String,
+    val detail: String
+) {
+    val ruleLabel: String get() = rule.replace('_', ' ')
+}
+
+/**
+ * An amber finding, mirroring reviews/{id}. Deliberately carries NO credential
+ * list: Tier B is heuristic, so it must never offer a revoke button. A tailgating
+ * employee trips NO_ENTRY_PATH honestly. Red revokes; amber informs.
+ */
+data class Review(
+    val id: String,
+    val personName: String,
+    val doorId: String,
+    val ts: Long,
+    val findings: List<Finding>
+)
+
 private val clockFmt = SimpleDateFormat("HH:mm:ss", Locale.US)
 
 fun Long.asClock(): String = clockFmt.format(Date(this))
@@ -82,5 +103,29 @@ fun DocumentSnapshot.toAnomaly(): Anomaly? {
         observedS = get("observed_s").asDouble(),
         requiredS = get("required_s").asDouble(),
         severity = get("severity").asDouble()
+    )
+}
+
+/**
+ * Same hand-rolled treatment as toAnomaly(), same reason - Node's int64/double
+ * split applies to `ts` too. A review with no findings is not worth a card, so
+ * it maps to null and drops out of the feed.
+ */
+fun DocumentSnapshot.toReview(): Review? {
+    val raw = get("findings") as? List<*> ?: return null
+
+    val findings = raw.mapNotNull {
+        val m = it as? Map<*, *> ?: return@mapNotNull null
+        val rule = m["rule"].asStr()
+        if (rule.isEmpty()) null else Finding(rule, m["detail"].asStr())
+    }
+    if (findings.isEmpty()) return null
+
+    return Review(
+        id = id,
+        personName = get("person_name").asStr().ifEmpty { "Unknown person" },
+        doorId = get("door_id").asStr(),
+        ts = get("ts").asLong(),
+        findings = findings
     )
 }

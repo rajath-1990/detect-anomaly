@@ -64,11 +64,10 @@ export function evaluate(evt) {
   // Pooled credentials - visitor passes, contractor badges, the one kept on a
   // hook at the loading dock - belong to a role, not a person. Many bodies use
   // them legitimately every day, so person-level physics does not apply.
-  // `check` says WHICH of the OK cases this is. `reason` is deliberately left
-  // alone: engine.js's REVIEW object below copies `reason` and nothing else, and
-  // writeReview throws on an undefined one - that throw is what keeps the
-  // `reviews` collection empty (see CLAUDE.md's known boundaries). Putting this
-  // data on `reason` would silently start filling that collection mid-demo.
+  // `check` says WHICH of the OK cases this is, and rides on its own key. It is
+  // deliberately NOT folded onto `reason`: the REVIEW object below copies
+  // `reason`, and that field now has to stay a short, stable enum value because
+  // it is what the phone's amber card reads. `check` is console detail.
   let result = cred.shared
     ? { verdict: 'OK', reason: 'POOLED_CREDENTIAL', check: 'POOLED_CREDENTIAL' }
     : { verdict: 'OK', check: 'FIRST_SCAN' };
@@ -130,7 +129,11 @@ export function evaluate(evt) {
     if (findings.length > 0) {
       result = {
         verdict: 'REVIEW',
-        reason: result.reason,
+        // Never undefined. Firestore rejects an undefined field, so writeReview
+        // used to throw on every non-pooled review and server.js swallowed it -
+        // the `reviews` collection could only ever hold pooled-pass docs. The
+        // dedupe in server.js is what replaces that accidental volume guard.
+        reason: result.reason ?? 'TIER_B_REVIEW',
         person_id: cred.person_id,
         person_name: cred.person_name,
         credential_id: evt.credential_id,

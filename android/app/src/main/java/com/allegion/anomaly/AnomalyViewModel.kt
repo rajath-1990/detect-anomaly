@@ -13,6 +13,8 @@ import kotlinx.coroutines.launch
 
 data class UiState(
     val alerts: List<Anomaly> = emptyList(),
+    /** Amber. Shown below the red list, with no action attached. */
+    val reviews: List<Review> = emptyList(),
     val doorNames: Map<String, String> = emptyMap(),
     val revoked: Set<String> = emptySet()
 ) {
@@ -37,8 +39,13 @@ class AnomalyViewModel(
     val highlightId: StateFlow<String?> = _highlightId.asStateFlow()
 
     val state: StateFlow<UiState> =
-        combine(repo.anomalies(), doorNames, repo.revokedIds()) { alerts, doors, revoked ->
-            UiState(alerts = alerts, doorNames = doors, revoked = revoked)
+        combine(
+            repo.anomalies(),
+            repo.reviews(),
+            doorNames,
+            repo.revokedIds()
+        ) { alerts, reviews, doors, revoked ->
+            UiState(alerts = alerts, reviews = reviews, doorNames = doors, revoked = revoked)
         }.stateIn(
             scope = viewModelScope,
             // Keeps listeners alive briefly across a rotation, drops them when
